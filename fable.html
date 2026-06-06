@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FABLE — Track & Discuss Books</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#1E3A8A',
+        primaryLight: '#2D4A77',
+        primaryDark: '#152C6B',
+        surface: '#FFFFFF',
+        bgMain: '#F8FAFC',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Georgia', 'serif'],
+      }
+    }
+  }
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #F8FAFC; }
+  .star-btn { cursor: pointer; transition: all 0.15s ease; }
+  .star-btn:hover { transform: scale(1.2); }
+  .star-btn.active { color: #F59E0B; filter: drop-shadow(0 0 4px rgba(245,158,11,0.4)); }
+  .match-bar { transition: width 1.2s ease-out; }
+  .thread-item { transition: all 0.2s ease; }
+  .thread-item:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
+  .modal-overlay { transition: opacity 0.3s ease; }
+  .modal-content { transition: transform 0.3s ease, opacity 0.3s ease; }
+  .modal-overlay.hidden { opacity: 0; pointer-events: none; }
+  .modal-overlay.hidden .modal-content { transform: scale(0.95); opacity: 0; }
+  .notification-badge { animation: pulse 2s infinite; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-slideIn { animation: slideIn 0.4s ease-out forwards; }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .sparkle { animation: sparkle 2s ease-in-out infinite; }
+  @keyframes sparkle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.1); }
+  }
+  .book-cover-gradient {
+    background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 50%, #60A5FA 100%);
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  textarea:focus, input:focus { outline: none; box-shadow: 0 0 0 3px rgba(30,58,138,0.15); }
+</style>
+</head>
+<body class="bg-bgMain min-h-screen">
+
+<header class="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16 sm:h-18">
+      <div class="flex items-center gap-2.5 flex-shrink-0">
+        <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+          <span class="text-white font-black text-xl font-display" style="font-style:italic">f</span>
+        </div>
+        <span class="text-primary font-extrabold text-xl tracking-tight hidden sm:block">FABLE</span>
+      </div>
+
+      <div class="flex-1 max-w-xl mx-3 sm:mx-8">
+        <div class="relative group">
+          <input
+            type="text"
+            id="globalSearch"
+            placeholder="Ask Gemini"
+            class="w-full bg-gray-50 hover:bg-gray-100 focus:bg-white border border-gray-200 focus:border-primary rounded-xl py-2.5 pl-11 pr-20 text-sm text-gray-800 placeholder-gray-400 transition-all duration-200"
+            oninput="handleGlobalSearch(this.value)"
+          >
+          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" stroke-width="2"/>
+            <path d="m21 21-4.35-4.35" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <button class="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-primary/5 hover:bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            <span class="hidden sm:inline">Gemini</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <button class="relative p-2 text-gray-500 hover:text-primary hover:bg-primary/5 rounded-xl transition-all" onclick="toggleNotifications()">
+          <svg class="w-5.5 h-5.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span id="notifBadge" class="notification-badge absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">3</span>
+        </button>
+        <div class="w-9 h-9 rounded-full overflow-hidden ring-2 ring-primary/10 cursor-pointer hover:ring-primary/30 transition-all" onclick="showToast('Profile settings coming soon!')">
+          <img src="https://api.dicebear.com/7.x/initials/svg?seed=Alex&backgroundColor=1E3A8A&textColor=ffffff&fontSize=40" alt="Avatar" class="w-full h-full">
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+  <section class="animate-slideIn">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow duration-300">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5 p-5 sm:p-6">
+        <div class="flex-shrink-0">
+          <div class="w-20 h-28 sm:w-24 sm:h-32 rounded-xl overflow-hidden shadow-lg book-cover-gradient flex items-center justify-center relative">
+            <div class="absolute inset-0 bg-black/10"></div>
+            <div class="relative text-center text-white px-2">
+              <div class="text-[10px] uppercase tracking-widest opacity-70 mb-0.5">Frank Herbert</div>
+              <div class="text-lg font-bold font-display leading-tight">Dune</div>
+              <div class="text-[9px] mt-1 opacity-60">1965</div>
+            </div>
+          </div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="inline-flex items-center gap-1 bg-orange-50 text-orange-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+              <span>🔥</span> Streak: <span id="streakDays">32</span> days
+            </span>
+            <span class="inline-flex items-center gap-1 bg-green-50 text-green-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+              <span>📖</span> Reading
+            </span>
+          </div>
+          <h2 class="text-lg sm:text-xl font-bold text-gray-900 mt-2 truncate">Book: Dune — Frank Herbert</h2>
+          <div class="flex items-center gap-4 mt-3">
+            <div class="flex-1 max-w-xs">
+              <div class="flex justify-between text-xs text-gray-500 mb-1.5">
+                <span>Progress</span>
+                <span id="progressText">248 / 688 pages</span>
+              </div>
+              <div class="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                <div id="progressBar" class="match-bar h-full rounded-full bg-gradient-to-r from-primary to-blue-500" style="width: 36%"></div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <span>⏱ 2h 14m today</span>
+            </div>
+          </div>
+        </div>
+        <button class="flex-shrink-0 p-2.5 bg-primary/5 hover:bg-primary/10 text-primary rounded-xl transition-all group" onclick="switchTab('bookDetail')">
+          <svg class="w-5 h-5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
+
+    <div class="lg:col-span-3 space-y-6">
+
+      <section class="animate-slideIn" style="animation-delay: 0.1s">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-5 sm:px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+            <h3 class="font-bold text-gray-900 text-base flex items-center gap-2">
+              <span class="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center text-sm">⭐</span>
+              Ratings & Notes
+            </h3>
+            <span class="text-xs text-gray-400">Last updated: just now</span>
+          </div>
+          <div class="p-5 sm:p-6 space-y-5">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Your Rating</label>
+              <div class="flex items-center gap-1.5" id="starContainer">
+                </div>
+              <div class="mt-2 flex items-center gap-2">
+                <span id="ratingText" class="text-sm font-medium text-gray-600">Click to rate</span>
+                <span id="ratingValue" class="text-xs text-gray-400"></span>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Reading Notes</label>
+              <textarea
+                id="notesArea"
+                rows="5"
+                class="w-full bg-gray-50 hover:bg-gray-100 focus:bg-white border border-gray-200 focus:border-primary rounded-xl p-4 text-sm text-gray-800 placeholder-gray-400 resize-none transition-all duration-200 leading-relaxed"
+                placeholder="I am writing my notes here, please include starring, and notes here..."
+              ></textarea>
+              <div class="flex items-center justify-between mt-2">
+                <span id="charCount" class="text-xs text-gray-400">0 characters</span>
+                <span id="saveStatus" class="text-xs text-green-500 font-medium opacity-0 transition-opacity">✓ Saved</span>
+              </div>
+            </div>
+
+            <div id="savedNotesList" class="space-y-2"></div>
+
+            <button
+              id="saveNotesBtn"
+              onclick="saveNotes()"
+              class="w-full sm:w-auto bg-primary hover:bg-primaryDark text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Manage Ratings & Notes
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="animate-slideIn" style="animation-delay: 0.2s">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-5 sm:px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+            <h3 class="font-bold text-gray-900 text-base flex items-center gap-2">
+              <span class="w-7 h-7 bg-purple-50 rounded-lg flex items-center justify-center text-sm">💬</span>
+              Community Threads
+            </h3>
+            <span class="text-xs bg-purple-50 text-purple-600 font-medium px-2.5 py-1 rounded-full" id="threadCount">3 threads</span>
+          </div>
+          <div class="p-5 sm:p-6">
+            <div id="threadsList" class="space-y-3">
+              </div>
+            <button
+              onclick="openNewThreadModal()"
+              class="w-full mt-4 bg-gradient-to-r from-primary to-primaryLight hover:from-primaryDark hover:to-primary text-white font-semibold text-sm px-6 py-3.5 rounded-xl shadow-lg shadow-primary/15 hover:shadow-primary/25 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <span class="text-base">🖊️</span> Start New Thread
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="lg:col-span-2 space-y-6">
+
+      <section class="animate-slideIn" style="animation-delay: 0.15s">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-5 sm:px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+            <h3 class="font-bold text-gray-900 text-base flex items-center gap-2">
+              <span class="sparkle text-lg">✨</span>
+              For You
+            </h3>
+            <span class="inline-flex items-center gap-1 text-xs bg-gradient-to-r from-purple-50 to-pink-50 text-purple-600 font-medium px-2.5 py-1 rounded-full">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              AI Powered
+            </span>
+          </div>
+          <div class="p-5 sm:p-6 space-y-4">
+            <div id="recList">
+              </div>
+            <button
+              onclick="viewAllRecommendations()"
+              class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <span>✨</span> View Recommendations
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="animate-slideIn" style="animation-delay: 0.25s">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-5 sm:px-6 py-4 border-b border-gray-50">
+            <h3 class="font-bold text-gray-900 text-base flex items-center gap-2">
+              <span class="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center text-sm">📊</span>
+              Quick Stats
+            </h3>
+          </div>
+          <div class="p-5 sm:p-6">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="bg-gray-50 rounded-xl p-3 text-center">
+                <div class="text-2xl font-extrabold text-primary">12</div>
+                <div class="text-xs text-gray-500 mt-0.5">Books Read</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-3 text-center">
+                <div class="text-2xl font-extrabold text-primary">3,847</div>
+                <div class="text-xs text-gray-500 mt-0.5">Pages</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-3 text-center">
+                <div class="text-2xl font-extrabold text-primary">42h</div>
+                <div class="text-xs text-gray-500 mt-0.5">Reading Time</div>
+              </div>
+              <div class="bg-gray-50 rounded-xl p-3 text-center">
+                <div class="text-2xl font-extrabold text-primary">32</div>
+                <div class="text-xs text-gray-500 mt-0.5">Day Streak</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="animate-slideIn" style="animation-delay: 0.3s">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-5 sm:px-6 py-4 border-b border-gray-50">
+            <h3 class="font-bold text-gray-900 text-base flex items-center gap-2">
+              <span class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center text-sm">📅</span>
+              This Week
+            </h3>
+          </div>
+          <div class="p-5 sm:p-6">
+            <div class="grid grid-cols-7 gap-2" id="weeklyGrid">
+              </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="newThreadModal" class="modal-overlay hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-primary/5 to-transparent">
+      <h3 class="font-bold text-gray-900 text-lg">🖊️ Start New Thread</h3>
+      <button onclick="closeNewThreadModal()" class="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Thread Title</label>
+        <input type="text" id="threadTitle" placeholder="e.g., What did you think of the ending?" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-primary transition-colors">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Related Book</label>
+        <select id="threadBook" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:border-primary transition-colors appearance-none">
+          <option value="Dune">Dune — Frank Herbert</option>
+          <option value="Project Hail Mary">Project Hail Mary — Andy Weir</option>
+          <option value="The Midnight Library">The Midnight Library — Matt Haig</option>
+          <option value="Klara and the Sun">Klara and the Sun — Kazuo Ishiguro</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Your Message</label>
+        <textarea id="threadMessage" rows="4" placeholder="Share your thoughts with the community..." class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 resize-none focus:border-primary transition-colors"></textarea>
+      </div>
+    </div>
+    <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3 bg-gray-50/50">
+      <button onclick="closeNewThreadModal()" class="px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-all">Cancel</button>
+      <button onclick="submitNewThread()" class="px-6 py-2.5 bg-primary hover:bg-primaryDark text-white text-sm font-semibold rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">Post Thread</button>
+    </div>
+  </div>
+</div>
+
+<div id="recModal" class="modal-overlay hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+  <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[85vh] flex flex-col">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 flex-shrink-0">
+      <h3 class="font-bold text-gray-900 text-lg flex items-center gap-2">✨ AI Recommendations</h3>
+      <button onclick="closeRecModal()" class="p-1.5 hover:bg-white/60 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-6 overflow-y-auto space-y-4" id="fullRecList">
+      </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium opacity-0 pointer-events-none transition-all duration-300 translate-y-4 flex items-center gap-2">
+  <span id="toastIcon">✅</span>
+  <span id="toastText">Success!</span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// MOCK DATA & STATE MANAGEMENT
+// ═══════════════════════════════════════════════
+
+const APP_STATE = {
+  currentBook: {
+    title: 'Dune',
+    author: 'Frank Herbert',
+    totalPages: 688,
+    currentPage: 248,
+    streak: 32,
+    rating: 0,
+    halfStar: false,
+  },
+  notes: [],
+  threads: [
+    {
+      id: 1,
+      title: "#DuneDiscussion: Is the new adaptation better?",
+      author: "Sarah Chen",
+      avatar: "SC",
+      avatarColor: "#7C3AED",
+      book: "Dune",
+      excerpt: "I just finished rewatching Villeneuve's Dune and I'm blown away by how it captures the atmosphere. But does it capture Herbert's vision as well as the 1984 version?",
+      replies: 2,
+      likes: 15,
+      time: "2h ago",
+      tags: ["discussion", "adaptation"]
+    },
+    {
+      id: 2,
+      title: "Favorite Quote?",
+      author: "Marcus Johnson",
+      avatar: "MJ",
+      avatarColor: "#059669",
+      book: "Dune",
+      excerpt: "The one that always hits me: 'Fear is the mind-killer.' Every time I face a challenge, I go back to this line. What's yours?",
+      replies: 10,
+      likes: 42,
+      time: "5h ago",
+      tags: ["quotes", "reflection"]
+    },
+    {
+      id: 3,
+      title: "Paul's character arc — hero or villain?",
+      author: "Elena Rodriguez",
+      avatar: "ER",
+      avatarColor: "#DC2626",
+      book: "Dune",
+      excerpt: "After reading through Messiah, I'm convinced Herbert was writing a critique of hero narratives. The spice must flow, but at what cost?",
+      replies: 7,
+      likes: 28,
+      time: "1d ago",
+      tags: ["analysis", "character"]
+    }
+  ],
+  recommendations: [
+    {
+      title: "Project Hail Mary",
+      author: "Andy Weir",
+      match: 87,
+      reason: "Based on your love for complex world-building and science-driven narratives in Dune",
+      color: "#3B82F6",
+      genre: "Sci-Fi"
+    },
+    {
+      title: "Klara and the Sun",
+      author: "Kazuo Ishiguro",
+      match: 72,
+      reason: "Readers of Dune who enjoy philosophical depth rated this highly",
+      color: "#8B5CF6",
+      genre: "Literary Fiction"
+    },
+    {
+      title: "The Name of the Wind",
+      author: "Patrick Rothfuss",
+      match: 65,
+      reason: "Epic fantasy with intricate world-building similar to Herbert's universe",
+      color: "#F59E0B",
+      genre: "Fantasy"
+    },
+    {
+      title: "Hyperion",
+      author: "Dan Simmons",
+      match: 91,
+      reason: "Structurally complex sci-fi masterpiece — your top match based on reading patterns",
+      color: "#EC4899",
+      genre: "Sci-Fi"
+    },
+    {
+      title: "Blindsight",
+      author: "Peter Watts",
+      match: 58,
+      reason: "Hard sci-fi exploring consciousness — a deep cut for serious Dune fans",
+      color: "#10B981",
+      genre: "Hard Sci-Fi"
+    }
+  ],
+  notifications: [
+    { id: 1, text: "Sarah Chen replied to your thread", read: false },
+    { id: 2, text: "Your 32-day streak is amazing! 🔥", read: false },
+    { id: 3, text: "New AI recommendation for you", read: false }
+  ]
+};
+
+// Load from localStorage
+function loadState() {
+  try {
+    const saved = localStorage.getItem('fableState');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      Object.assign(APP_STATE, parsed);
+    }
+  } catch(e) { console.log('Fresh state'); }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem('fableState', JSON.stringify(APP_STATE));
+  } catch(e) { console.log('Storage full'); }
+}
+
+// ═══════════════════════════════════════════════
+// STAR RATING SYSTEM
+// ═══════════════════════════════════════════════
+
+function renderStars() {
+  const container = document.getElementById('starContainer');
+  let html = '';
+  for (let i = 1; i <= 10; i++) {
+    const starNum = i / 2;
+    const isFull = starNum <= APP_STATE.currentBook.rating;
+    const isHalf = i % 2 === 0 && starNum - 0.5 === APP_STATE.currentBook.rating;
+    const starClass = isFull ? 'active' : '';
+    const svg = isFull
+      ? `<svg class="w-7 h-7 ${starClass}" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`
+      : isHalf
+        ? `<svg class="w-7 h-7 ${starClass}" viewBox="0 0 24 24"><defs><linearGradient id="halfGrad"><stop offset="50%" stop-color="#F59E0B"/><stop offset="50%" stop-color="#D1D5DB"/></linearGradient></defs><path fill="url(#halfGrad)" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`
+        : `<svg class="w-7 h-7 text-gray-300 star-btn" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+
+    html += `<button onclick="setRating(${starNum})" class="star-btn p-0.5 rounded focus:outline-none" title="${starNum} star${starNum !== 1 ? 's' : ''}">${svg}</button>`;
+  }
+  container.innerHTML = html;
+  updateRatingDisplay();
+}
+
+function setRating(value) {
+  APP_STATE.currentBook.rating = value;
+  renderStars();
+  saveState();
+}
+
+function updateRatingDisplay() {
+  const rating = APP_STATE.currentBook.rating;
+  const text = document.getElementById('ratingText');
+  const value = document.getElementById('ratingValue');
+
+  if (rating === 0) {
+    text.textContent = 'Click to rate';
+    value.textContent = '';
+  } else {
+    const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Masterpiece'];
+    text.textContent = `${rating}/5 — ${labels[Math.round(rating)] || 'Rated'}`;
+    value.textContent = `(saved to your library)`;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// NOTES SYSTEM
+// ═══════════════════════════════════════════════
+
+const notesArea = document.getElementById('notesArea');
+notesArea.addEventListener('input', function() {
+  document.getElementById('charCount').textContent = `${this.value.length} characters`;
+});
+
+function saveNotes() {
+  const text = notesArea.value.trim();
+  if (!text) {
+    showToast('⚠️', 'Please write something before saving.');
+    return;
+  }
+
+  const note = {
+    id: Date.now(),
+    text: text,
+    rating: APP_STATE.currentBook.rating,
+    timestamp: new Date().toLocaleString(),
+    book: APP_STATE.currentBook.title
+  };
+
+  APP_STATE.notes.unshift(note);
+  notesArea.value = '';
+  document.getElementById('charCount').textContent = '0 characters';
+
+  const saveStatus = document.getElementById('saveStatus');
+  saveStatus.style.opacity = '1';
+  setTimeout(() => saveStatus.style.opacity = '0', 2000);
+
+  renderSavedNotes();
+  saveState();
+  showToast('✅', 'Rating & notes saved successfully!');
+}
+
+function renderSavedNotes() {
+  const list = document.getElementById('savedNotesList');
+  if (!APP_STATE.notes.length) {
+    list.innerHTML = '';
+    return;
+  }
+
+  list.innerHTML = `
+    <div class="border-t border-gray-100 pt-4 mt-2">
+      <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Recent Notes</h4>
+      ${APP_STATE.notes.slice(0, 3).map(n => `
+        <div class="bg-gray-50 rounded-xl p-3 mb-2 group hover:bg-gray-100 transition-colors">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-1.5">
+              ${n.rating ? '<span class="text-amber-400 text-xs">★</span>'.repeat(Math.round(n.rating)) : ''}
+              <span class="text-xs text-gray-400">${n.book}</span>
+            </div>
+            <button onclick="deleteNote(${n.id})" class="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <p class="text-sm text-gray-700 leading-relaxed">${escapeHtml(n.text)}</p>
+          <div class="text-xs text-gray-400 mt-2">${n.timestamp}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function deleteNote(id) {
+  APP_STATE.notes = APP_STATE.notes.filter(n => n.id !== id);
+  renderSavedNotes();
+  saveState();
+  showToast('🗑️', 'Note deleted');
+}
+
+// ═══════════════════════════════════════════════
+// COMMUNITY THREADS
+// ═══════════════════════════════════════════════
+
+function renderThreads() {
+  const list = document.getElementById('threadsList');
+  document.getElementById('threadCount').textContent = `${APP_STATE.threads.length} threads`;
+
+  list.innerHTML = APP_STATE.threads.map((t, idx) => `
+    <div class="thread-item bg-gray-50 hover:bg-white border border-transparent hover:border-gray-100 rounded-xl p-4 cursor-pointer animate-slideIn" style="animation-delay: ${idx * 0.05}s" onclick="likeThread(${t.id})">
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold" style="background:${t.avatarColor}">
+          ${t.avatar}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap mb-1">
+            <h4 class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(t.title)}</h4>
+          </div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs text-gray-500 font-medium">${t.author}</span>
+            <span class="text-xs text-gray-300">·</span>
+            <span class="text-xs text-gray-400">${t.time}</span>
+            <span class="text-xs text-gray-300">·</span>
+            <span class="text-xs text-gray-400">${t.book}</span>
+          </div>
+          <p class="text-sm text-gray-600 leading-relaxed mb-2 line-clamp-2">${escapeHtml(t.excerpt)}</p>
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-1 bg-primary/5 text-primary text-xs font-medium px-2.5 py-1 rounded-full">
+              💬 ${t.replies} reply${t.replies !== 1 ? 'ies' : ''}
+            </span>
+            <span class="inline-flex items-center gap-1 text-gray-400 text-xs">
+              ❤️ ${t.likes}
+            </span>
+            ${t.tags.map(tag => `<span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">#${tag}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function likeThread(id) {
+  const thread = APP_STATE.threads.find(t => t.id === id);
+  if (thread) {
+    thread.likes++;
+    renderThreads();
+    saveState();
+  }
+}
+
+// Modal functions
+function openNewThreadModal() {
+  document.getElementById('newThreadModal').classList.remove('hidden');
+  document.getElementById('threadTitle').focus();
+}
+
+function closeNewThreadModal() {
+  document.getElementById('newThreadModal').classList.add('hidden');
+  document.getElementById('threadTitle').value = '';
+  document.getElementById('threadMessage').value = '';
+}
+
+function submitNewThread() {
+  const title = document.getElementById('threadTitle').value.trim();
+  const message = document.getElementById('threadMessage').value.trim();
+  const book = document.getElementById('threadBook').value;
+
+  if (!title) {
+    showToast('⚠️', 'Please enter a thread title.');
+    return;
+  }
+  if (!message) {
+    showToast('⚠️', 'Please write a message.');
+    return;
+  }
+
+  const newThread = {
+    id: Date.now(),
+    title: title,
+    author: "You",
+    avatar: "YU",
+    avatarColor: "#1E3A8A",
+    book: book,
+    excerpt: message,
+    replies: 0,
+    likes: 0,
+    time: "Just now",
+    tags: ["new"]
+  };
+
+  APP_STATE.threads.unshift(newThread);
+  closeNewThreadModal();
+  renderThreads();
+  saveState();
+  showToast('🎉', 'Thread posted successfully!');
+}
+
+// ═══════════════════════════════════════════════
+// AI RECOMMENDATIONS
+// ═══════════════════════════════════════════════
+
+function renderRecommendations() {
+  const list = document.getElementById('recList');
+  const sorted = [...APP_STATE.recommendations].sort((a, b) => b.match - a.match).slice(0, 2);
+
+  list.innerHTML = sorted.map((rec, idx) => createRecCard(rec, idx)).join('');
+}
+
+function renderFullRecommendations() {
+  const list = document.getElementById('fullRecList');
+  const sorted = [...APP_STATE.recommendations].sort((a, b) => b.match - a.match);
+
+  list.innerHTML = sorted.map((rec, idx) => `
+    <div class="flex gap-4 p-4 bg-gray-50 rounded-xl hover:bg-white hover:shadow-md border border-transparent hover:border-gray-100 transition-all cursor-pointer animate-slideIn" style="animation-delay: ${idx * 0.05}s" onclick="addRecToShelf('${rec.title}')">
+      <div class="flex-shrink-0 w-16 h-24 rounded-lg flex items-center justify-center text-white text-lg font-bold font-display relative overflow-hidden" style="background: linear-gradient(135deg, ${rec.color}, ${rec.color}dd)">
+        <div class="absolute top-1 right-1 text-[9px] bg-white/20 px-1.5 py-0.5 rounded">${rec.genre}</div>
+        <span class="relative z-10 text-center leading-tight px-1">${rec.title.split(' ').slice(0, 2).join('<br>')}</span>
+      </div>
+      <div class="flex-1 min-w-0 py-1">
+        <div class="flex items-center gap-2 mb-1">
+          <h4 class="font-bold text-gray-900 text-sm">${rec.title}</h4>
+          <span class="sparkle text-xs">✨</span>
+        </div>
+        <p class="text-xs text-gray-500 mb-2">${rec.author}</p>
+        <div class="mb-2">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="font-semibold" style="color:${rec.color}">${rec.match}% Match</span>
+            <span class="text-gray-400">AI Confidence</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div class="match-bar h-full rounded-full" style="width:${rec.match}%;background:${rec.color}"></div>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 leading-relaxed">${rec.reason}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+function createRecCard(rec, idx) {
+  return `
+    <div class="flex gap-4 p-4 bg-gradient-to-br from-gray-50 to-white rounded-xl hover:shadow-md border border-gray-50 hover:border-gray-100 transition-all cursor-pointer" onclick="viewRecDetail(${idx})">
+      <div class="flex-shrink-0 w-16 h-24 rounded-lg flex items-center justify-center text-white text-sm font-bold font-display relative overflow-hidden" style="background: linear-gradient(135deg, ${rec.color}, ${rec.color}cc)">
+        <div class="absolute inset-0 bg-black/5"></div>
+        <span class="relative z-10 text-center leading-tight px-1 text-xs">${rec.title.split(' ').slice(0, 2).join('<br>')}</span>
+      </div>
+      <div class="flex-1 min-w-0 py-1">
+        <div class="flex items-center justify-between mb-1">
+          <h4 class="font-bold text-gray-900 text-sm truncate">${rec.title}</h4>
+          <span class="sparkle text-xs flex-shrink-0 ml-1">✨</span>
+        </div>
+        <p class="text-xs text-gray-500 mb-2">${rec.author}</p>
+        <div class="mb-2">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="font-semibold" style="color:${rec.color}">${rec.match}% Match</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+            <div class="match-bar h-full rounded-full" style="width:${rec.match}%;background:${rec.color}"></div>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 leading-relaxed line-clamp-2">${rec.reason}</p>
+      </div>
+    </div>
+  `;
+}
+
+function viewRecDetail(idx) {
+  const sorted = [...APP_STATE.recommendations].sort((a, b) => b.match - a.match);
+  const rec = sorted[idx];
+  showToast('📖', `"${rec.title}" — Opening details...`);
+}
+
+function addRecToShelf(title) {
+  showToast('📚', `"${title}" added to your shelf!`);
+}
+
+function viewAllRecommendations() {
+  renderFullRecommendations();
+  document.getElementById('recModal').classList.remove('hidden');
+}
+
+function closeRecModal() {
+  document.getElementById('recModal').classList.add('hidden');
+}
+
+// ═══════════════════════════════════════════════
+// WEEKLY GRID
+// ═══════════════════════════════════════════════
+
+function renderWeeklyGrid() {
+  const grid = document.getElementById('weeklyGrid');
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const todayIdx = new Date().getDay();
+  const todayMapped = todayIdx === 0 ? 6 : todayIdx - 1;
+  const readingDays = [0, 1, 2, 3, 5];
+
+  grid.innerHTML = days.map((day, i) => {
+    const isReading = readingDays.includes(i);
+    const isToday = i === todayMapped;
+    const bgClass = isToday
+      ? 'bg-primary text-white ring-2 ring-primary/30'
+      : isReading
+        ? 'bg-primary/10 text-primary'
+        : 'bg-gray-50 text-gray-400';
+
+    return `
+      <div class="${bgClass} rounded-xl p-2 text-center transition-all ${isToday ? 'shadow-lg shadow-primary/20' : ''}">
+        <div class="text-[10px] font-medium mb-1">${day}</div>
+        <div class="text-lg">${isReading ? '📖' : ''}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════
+
+function toggleNotifications() {
+  const unread = APP_STATE.notifications.filter(n => !n.read).length;
+  if (unread > 0) {
+    APP_STATE.notifications.forEach(n => n.read = true);
+    document.getElementById('notifBadge').style.display = 'none';
+    saveState();
+    showToast('🔔', 'All notifications marked as read');
+  } else {
+    showToast('🔔', 'No new notifications');
+  }
+}
+
+// ═══════════════════════════════════════════════
+// GLOBAL SEARCH
+// ═══════════════════════════════════════════════
+
+function handleGlobalSearch(query) {
+  if (!query.trim()) return;
+  if (query.toLowerCase().includes('gemini') || query.toLowerCase().includes('recommend')) {
+    showToast('✨', 'AI: Based on your reading of Dune, try Project Hail Mary next!');
+  } else if (query.toLowerCase().includes('dune')) {
+    showToast('📖', 'Dune — Page 248/688 · 36% complete · 32-day streak');
+  } else {
+    showToast('🔍', `Searching for "${query}"...`);
+  }
+}
+
+function switchTab(tab) {
+  if (tab === 'bookDetail') {
+    showToast('📖', 'Opening full book detail view for Dune...');
+  }
+}
+
+// ═══════════════════════════════════════════════
+// TOAST SYSTEM
+// ═══════════════════════════════════════════════
+
+function showToast(icon, message) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toastIcon').textContent = icon;
+  document.getElementById('toastText').textContent = message;
+  toast.style.opacity = '1';
+  toast.style.pointerEvents = 'auto';
+  toast.style.transform = 'translateX(-50%) translateY(0)';
+
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.pointerEvents = 'none';
+    toast.style.transform = 'translateX(-50%) translateY(16px)';
+  }, 3000);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ═══════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════
+
+function init() {
+  loadState();
+  renderStars();
+  renderSavedNotes();
+  renderThreads();
+  renderRecommendations();
+  renderWeeklyGrid();
+
+  const pct = Math.round((APP_STATE.currentBook.currentPage / APP_STATE.currentBook.totalPages) * 100);
+  setTimeout(() => {
+    document.getElementById('progressBar').style.width = pct + '%';
+  }, 300);
+
+  const unread = APP_STATE.notifications.filter(n => !n.read).length;
+  if (unread === 0) {
+    document.getElementById('notifBadge').style.display = 'none';
+  }
+}
+
+// Close modals on overlay click
+document.getElementById('newThreadModal').addEventListener('click', function(e) {
+  if (e.target === this) closeNewThreadModal();
+});
+document.getElementById('recModal').addEventListener('click', function(e) {
+  if (e.target === this) closeRecModal();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeNewThreadModal();
+    closeRecModal();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
